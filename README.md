@@ -2,6 +2,12 @@
 
 This project is a small replayable RAG pipeline for support-ticket triage. It loads tickets and KB articles, retrieves grounded evidence, classifies each ticket, drafts customer replies, decides escalations, validates outputs, and writes inspectable artifacts.
 
+The full pipeline enforces the required stage order at runtime:
+
+```text
+INIT -> INPUTS_LOADED -> KB_INDEXED -> TICKETS_NORMALISED -> EVIDENCE_RETRIEVED -> TICKETS_CLASSIFIED -> RESPONSES_DRAFTED -> ESCALATIONS_DECIDED -> OUTPUTS_VALIDATED -> RESULTS_FINALISED
+```
+
 ## Setup
 
 ```bash
@@ -28,7 +34,7 @@ Replay mode does not need an API key.
 Expected result:
 
 ```text
-15 passed
+19 passed
 ```
 
 ## Run Retrieval
@@ -104,6 +110,8 @@ Replay mode does not call OpenAI. It uses deterministic local classification and
 
 Use this command when you want a clean, reproducible demo without network access or API cost.
 
+The main pipeline also skips retrieval recomputation when `tickets.json` and `kb_articles.json` have not changed. Retrieval artifacts store an input hash and are regenerated when either input file changes.
+
 Expected validation summary:
 
 ```text
@@ -124,10 +132,11 @@ Validation
 - `src/rag_triage/config.py`: loads API configuration from `.env`.
 - `src/rag_triage/schemas.py`: defines tickets, KB articles, retrieval results, classification, draft responses, triage decisions, LLM call logs, artifacts, stages, and controlled taxonomies.
 - `src/rag_triage/retrieval.py`: deterministic tokenization, scoring, ranking, and retrieval artifact writing.
+- `src/rag_triage/stage_machine.py`: runtime enforcement for the required pipeline stage order.
 - `src/rag_triage/classification.py`: builds grounded classification prompts, calls OpenAI with strict structured output, validates taxonomy, logs calls, and prints results.
 - `src/rag_triage/drafting.py`: builds grounded drafting prompts, calls OpenAI with strict structured output, logs calls, and writes draft replies.
 - `src/rag_triage/escalation.py`: decides target queues from classification and retrieved evidence.
-- `src/rag_triage/validation.py`: validates required artifacts, ticket coverage, taxonomy, citations, escalation rules, and unsafe draft phrases.
+- `src/rag_triage/validation.py`: validates required artifacts, ticket coverage, taxonomy, citations, escalation rules, unsafe draft phrases, and whether draft claims are supported by cited KB text.
 - `src/rag_triage/local_replay.py`: deterministic replay classifier and drafter for identical reruns without network calls.
 - `src/rag_triage/search.py`: command-line helper for inspecting the top three KB matches for a ticket.
 - `tests/test_contracts.py`: verifies the project contracts.

@@ -2,6 +2,7 @@ import json
 import math
 import re
 from collections import Counter
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -206,9 +207,43 @@ def run_retrieval(
     output_dir.mkdir(parents=True, exist_ok=True)
     write_json(
         output_dir / ArtifactName.RETRIEVAL_RESULTS.value,
-        {"results": [result.model_dump(mode="json") for result in retrieval_results]},
+        {
+            "input_hash": retrieval_input_hash(tickets_path, kb_path),
+            "results": [result.model_dump(mode="json") for result in retrieval_results],
+        },
     )
     write_json(output_dir / ArtifactName.RETRIEVAL_DEBUG.value, {"debug": retrieval_debug})
+
+
+def ensure_retrieval_current(
+    *,
+    tickets_path: Path = Path("tickets.json"),
+    kb_path: Path = Path("kb_articles.json"),
+    output_dir: Path = Path("."),
+) -> Path:
+    retrieval_path = output_dir / ArtifactName.RETRIEVAL_RESULTS.value
+    if retrieval_cache_matches(retrieval_path, tickets_path, kb_path):
+        return retrieval_path
+    run_retrieval(tickets_path=tickets_path, kb_path=kb_path, output_dir=output_dir)
+    return retrieval_path
+
+
+def retrieval_cache_matches(retrieval_path: Path, tickets_path: Path, kb_path: Path) -> bool:
+    try:
+        payload = json.loads(retrieval_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return False
+    return payload.get("input_hash") == retrieval_input_hash(tickets_path, kb_path)
+
+
+def retrieval_input_hash(tickets_path: Path, kb_path: Path) -> str:
+    digest = sha256()
+    for path in [tickets_path, kb_path]:
+        digest.update(path.name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -220,4 +255,3 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 if __name__ == "__main__":
     run_retrieval()
-

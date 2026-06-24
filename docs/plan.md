@@ -18,6 +18,8 @@ Do this next:
 
 Success criteria: rerunning retrieval with the same inputs gives byte-stable or logically identical results.
 
+Implemented replay polish also stores an input hash in `retrieval_results.json`, allowing the main pipeline to skip retrieval recomputation when `tickets.json` and `kb_articles.json` are unchanged.
+
 ## Phase 2: Structured AI Stages
 
 Add classification and response drafting after retrieval works.
@@ -51,3 +53,5 @@ Do this last:
 - Update `README.md` with exact run commands
 
 Success criteria: evaluator can delete generated artifacts, run the pipeline from clean inputs, then run validation and inspect every intermediate file.
+
+Runtime polish includes explicit stage-order enforcement with `PipelineStateMachine` and a KB-content grounding check that flags concrete draft terms unsupported by cited articles.

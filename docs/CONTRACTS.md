@@ -138,7 +138,7 @@ Attempted extras:
 
 The current retriever is deterministic and local. It lowercases text, removes common stopwords, applies a tiny set of support-domain stems, expands obvious billing and account-access hints, and scores each KB article with stable TF-IDF-style weights.
 
-Ties are broken by `article_id`, so the same inputs produce the same ranked outputs.
+Ties are broken by `article_id`, so the same inputs produce the same ranked outputs. Retrieval output includes an `input_hash` derived from `tickets.json` and `kb_articles.json`; the main pipeline reuses retrieval artifacts when this hash still matches and regenerates them when inputs change.
 
 Generate retrieval artifacts with:
 
@@ -185,6 +185,8 @@ Run the deterministic replay pipeline with:
 
 Replay mode intentionally avoids network calls. It uses local deterministic classification and drafting rules, fixed timestamps, sorted JSON keys, and the same input files to produce identical artifacts across reruns.
 
+The full pipeline uses `PipelineStateMachine` to enforce the required stage order at runtime. Attempting to advance to a stage out of order raises an error instead of silently continuing.
+
 ## Validation Behavior
 
 Validation checks:
@@ -194,5 +196,6 @@ Validation checks:
 - every ticket appears in each artifact
 - classification values match the controlled taxonomy
 - draft citations only cite retrieved article IDs
+- draft wording is checked against cited KB text so unsupported concrete claims are flagged
 - escalations obey the `target_queue` rule
 - unsafe phrases such as asking for passwords or guaranteeing refunds are flagged

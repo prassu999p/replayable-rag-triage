@@ -1,5 +1,6 @@
 import json
 import subprocess
+import time
 from pathlib import Path
 
 from rag_triage.escalation import decide_escalations
@@ -107,6 +108,28 @@ def test_validate_outputs_accepts_complete_safe_pipeline(tmp_path: Path) -> None
     assert (tmp_path / "grounding_flags.json").exists()
 
 
+def test_validate_outputs_flags_draft_claims_not_supported_by_cited_kb(tmp_path: Path) -> None:
+    write_phase3_inputs(tmp_path)
+    draft_payload = json.loads((tmp_path / "draft_responses.json").read_text(encoding="utf-8"))
+    draft_payload["drafts"][2]["draft_response"] = (
+        "Invoice PDFs are available under Account Settings > Security and are emailed automatically."
+    )
+    (tmp_path / "draft_responses.json").write_text(json.dumps(draft_payload), encoding="utf-8")
+    decide_escalations(
+        classification_path=tmp_path / "ticket_classification.json",
+        retrieval_path=tmp_path / "retrieval_results.json",
+        output_dir=tmp_path,
+    )
+    (tmp_path / "llm_calls.jsonl").write_text("", encoding="utf-8")
+
+    report = validate_outputs(tickets_path=Path("tickets.json"), output_dir=tmp_path)
+    flags = json.loads((tmp_path / "grounding_flags.json").read_text(encoding="utf-8"))
+
+    assert report["ok"] is False
+    assert flags["flags"][0]["ticket_id"] == "T-1003"
+    assert "not supported by cited KB text" in flags["flags"][0]["reason"]
+
+
 def test_replay_command_produces_identical_artifacts() -> None:
     command = [".venv/bin/python", "run_pipeline.py", "--replay"]
 
@@ -121,3 +144,14 @@ def test_replay_command_produces_identical_artifacts() -> None:
     assert Path("draft_responses.json").read_text(encoding="utf-8") == first_drafts
     assert Path("llm_calls.jsonl").read_text(encoding="utf-8") == first_logs
 
+
+def test_replay_command_reuses_retrieval_when_inputs_are_unchanged() -> None:
+    command = [".venv/bin/python", "run_pipeline.py", "--replay"]
+
+    subprocess.run(command, check=True, capture_output=True, text=True)
+    retrieval_path = Path("retrieval_results.json")
+    first_mtime = retrieval_path.stat().st_mtime_ns
+    time.sleep(0.01)
+    subprocess.run(command, check=True, capture_output=True, text=True)
+
+    assert retrieval_path.stat().st_mtime_ns == first_mtime
