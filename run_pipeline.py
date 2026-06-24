@@ -7,9 +7,13 @@ from rag_triage.classification import classify_tickets, print_classifications
 from rag_triage.config import load_settings
 from rag_triage.drafting import draft_responses, print_drafts
 from rag_triage.escalation import decide_escalations, print_escalations
-from rag_triage.local_replay import run_local_replay_ai
-from rag_triage.retrieval import run_retrieval
-from rag_triage.schemas import ArtifactName
+from rag_triage.local_replay import (
+    run_local_replay_classifications,
+    run_local_replay_drafts,
+)
+from rag_triage.retrieval import ensure_retrieval_current
+from rag_triage.schemas import ArtifactName, PipelineStage
+from rag_triage.stage_machine import PipelineStateMachine
 from rag_triage.validation import print_validation, validate_outputs
 
 
@@ -23,15 +27,27 @@ def main() -> None:
     args = parser.parse_args()
 
     output_dir = Path(".")
-    run_retrieval(output_dir=output_dir)
-    retrieval_path = output_dir / ArtifactName.RETRIEVAL_RESULTS.value
+    machine = PipelineStateMachine()
+    machine.advance(PipelineStage.INPUTS_LOADED)
+    retrieval_path = ensure_retrieval_current(output_dir=output_dir)
+    machine.advance(PipelineStage.KB_INDEXED)
+    machine.advance(PipelineStage.TICKETS_NORMALISED)
+    machine.advance(PipelineStage.EVIDENCE_RETRIEVED)
 
     if args.replay:
-        classifications, drafts = run_local_replay_ai(
+        classifications = run_local_replay_classifications(
             tickets_path=Path("tickets.json"),
             kb_path=Path("kb_articles.json"),
             retrieval_path=retrieval_path,
             output_dir=output_dir,
+        )
+        machine.advance(PipelineStage.TICKETS_CLASSIFIED)
+        drafts = run_local_replay_drafts(
+            tickets_path=Path("tickets.json"),
+            kb_path=Path("kb_articles.json"),
+            retrieval_path=retrieval_path,
+            output_dir=output_dir,
+            classifications=classifications,
         )
     else:
         settings = load_settings()
@@ -45,6 +61,7 @@ def main() -> None:
             output_dir=output_dir,
             provider=settings.ai_provider,
         )
+        machine.advance(PipelineStage.TICKETS_CLASSIFIED)
         drafts = draft_responses(
             client=client,
             model=settings.ai_model,
@@ -55,13 +72,17 @@ def main() -> None:
             output_dir=output_dir,
             provider=settings.ai_provider,
         )
+    machine.advance(PipelineStage.RESPONSES_DRAFTED)
 
     decisions = decide_escalations(
         classification_path=output_dir / ArtifactName.TICKET_CLASSIFICATION.value,
         retrieval_path=retrieval_path,
         output_dir=output_dir,
     )
+    machine.advance(PipelineStage.ESCALATIONS_DECIDED)
     report = validate_outputs(tickets_path=Path("tickets.json"), output_dir=output_dir)
+    machine.advance(PipelineStage.OUTPUTS_VALIDATED)
+    machine.advance(PipelineStage.RESULTS_FINALISED)
 
     print_classifications(classifications)
     print_drafts(drafts)
@@ -72,4 +93,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

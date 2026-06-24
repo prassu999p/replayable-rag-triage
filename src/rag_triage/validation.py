@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,11 @@ def validate_outputs(
         if not (output_dir / artifact).exists():
             errors.append(f"Missing required artifact: {artifact}")
 
+    kb_payload = load_json(Path("kb_articles.json"), errors)
+    article_text_by_id = {
+        row["article_id"]: f"{row['title']} {row['content']}"
+        for row in kb_payload.get("articles", [])
+    } if kb_payload else {}
     retrieval = load_json(output_dir / ArtifactName.RETRIEVAL_RESULTS.value, errors)
     classification_payload = load_json(output_dir / ArtifactName.TICKET_CLASSIFICATION.value, errors)
     draft_payload = load_json(output_dir / ArtifactName.DRAFT_RESPONSES.value, errors)
@@ -94,6 +100,7 @@ def validate_outputs(
                 errors.append(f"{draft.ticket_id} cites non-retrieved article {citation}")
         flag_count_before = len(grounding_flags)
         flag_unsafe_text(draft, grounding_flags)
+        flag_unsupported_claims(draft, article_text_by_id, grounding_flags)
         for flag in grounding_flags[flag_count_before:]:
             errors.append(f"{draft.ticket_id} failed grounding check: {flag['reason']}")
 
@@ -172,6 +179,76 @@ def flag_unsafe_text(draft: DraftResponse, grounding_flags: list[dict[str, str]]
                     "reason": f"Unsafe or unsupported phrase: {phrase}",
                 }
             )
+
+
+def flag_unsupported_claims(
+    draft: DraftResponse,
+    article_text_by_id: dict[str, str],
+    grounding_flags: list[dict[str, str]],
+) -> None:
+    cited_text = " ".join(article_text_by_id.get(citation, "") for citation in draft.citations)
+    supported_terms = set(content_terms(cited_text))
+    unsupported_terms = [
+        term
+        for term in content_terms(draft.draft_response)
+        if term not in supported_terms and term not in SAFE_RESPONSE_TERMS
+    ]
+    if len(set(unsupported_terms)) >= 3:
+        grounding_flags.append(
+            {
+                "ticket_id": draft.ticket_id,
+                "reason": (
+                    "Draft contains terms not supported by cited KB text: "
+                    + ", ".join(sorted(set(unsupported_terms))[:8])
+                ),
+            }
+        )
+
+
+SAFE_RESPONSE_TERMS = {
+    "again",
+    "and",
+    "are",
+    "because",
+    "but",
+    "can",
+    "cannot",
+    "contacting",
+    "customer",
+    "for",
+    "hello",
+    "hi",
+    "may",
+    "not",
+    "our",
+    "please",
+    "reaching",
+    "should",
+    "still",
+    "support",
+    "thanks",
+    "thank",
+    "that",
+    "the",
+    "this",
+    "try",
+    "unless",
+    "will",
+    "with",
+    "you",
+    "your",
+}
+
+
+def content_terms(text: str) -> list[str]:
+    terms: list[str] = []
+    for token in re.findall(r"[a-z0-9]+", text.lower()):
+        if len(token) <= 2 or token in SAFE_RESPONSE_TERMS:
+            continue
+        if token.endswith("s") and len(token) > 3 and not token.endswith("ss"):
+            token = token[:-1]
+        terms.append(token)
+    return terms
 
 
 def print_validation(report: dict[str, Any]) -> None:

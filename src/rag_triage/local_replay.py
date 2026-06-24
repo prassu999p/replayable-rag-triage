@@ -1,4 +1,5 @@
 import hashlib
+import json
 from pathlib import Path
 
 from rag_triage.common import write_json
@@ -27,16 +28,38 @@ def run_local_replay_ai(
     retrieval_path: Path,
     output_dir: Path,
 ) -> tuple[list[Classification], list[DraftResponse]]:
+    classifications = run_local_replay_classifications(
+        tickets_path=tickets_path,
+        kb_path=kb_path,
+        retrieval_path=retrieval_path,
+        output_dir=output_dir,
+    )
+    drafts = run_local_replay_drafts(
+        tickets_path=tickets_path,
+        kb_path=kb_path,
+        retrieval_path=retrieval_path,
+        output_dir=output_dir,
+        classifications=classifications,
+    )
+    return classifications, drafts
+
+
+def run_local_replay_classifications(
+    *,
+    tickets_path: Path,
+    kb_path: Path,
+    retrieval_path: Path,
+    output_dir: Path,
+) -> list[Classification]:
     tickets, articles = load_inputs(tickets_path, kb_path)
     article_by_id = {article.article_id: article for article in articles}
-    retrieval_payload = __import__("json").loads(retrieval_path.read_text(encoding="utf-8"))
+    retrieval_payload = json.loads(retrieval_path.read_text(encoding="utf-8"))
     retrieved_ids_by_ticket = {
         row["ticket_id"]: [article["article_id"] for article in row["retrieved_articles"]]
         for row in retrieval_payload["results"]
     }
 
     classifications: list[Classification] = []
-    drafts: list[DraftResponse] = []
     log_path = output_dir / ArtifactName.LLM_CALLS.value
     log_path.write_text("", encoding="utf-8")
 
@@ -47,20 +70,54 @@ def run_local_replay_ai(
         prompt = f"local classification\n{ticket.model_dump_json()}\n{[a.article_id for a in top_articles]}"
         append_replay_log(log_path, "classification", ticket.ticket_id, prompt, ArtifactName.TICKET_CLASSIFICATION.value)
 
-        draft = draft_locally(classification, [article.article_id for article in top_articles])
-        drafts.append(draft)
-        draft_prompt = make_drafting_prompt(ticket, classification, top_articles)
-        append_replay_log(log_path, "drafting", ticket.ticket_id, draft_prompt, ArtifactName.DRAFT_RESPONSES.value)
-
     write_json(
         output_dir / ArtifactName.TICKET_CLASSIFICATION.value,
         {"classifications": [row.model_dump(mode="json") for row in classifications]},
     )
+    return classifications
+
+
+def run_local_replay_drafts(
+    *,
+    tickets_path: Path,
+    kb_path: Path,
+    retrieval_path: Path,
+    output_dir: Path,
+    classifications: list[Classification],
+) -> list[DraftResponse]:
+    tickets, articles = load_inputs(tickets_path, kb_path)
+    ticket_by_id = {ticket.ticket_id: ticket for ticket in tickets}
+    article_by_id = {article.article_id: article for article in articles}
+    retrieval_payload = json.loads(retrieval_path.read_text(encoding="utf-8"))
+    retrieved_ids_by_ticket = {
+        row["ticket_id"]: [article["article_id"] for article in row["retrieved_articles"]]
+        for row in retrieval_payload["results"]
+    }
+    log_path = output_dir / ArtifactName.LLM_CALLS.value
+    drafts: list[DraftResponse] = []
+
+    for classification in classifications:
+        ticket = ticket_by_id[classification.ticket_id]
+        top_articles = [
+            article_by_id[article_id]
+            for article_id in retrieved_ids_by_ticket[classification.ticket_id]
+        ]
+        draft = draft_locally(classification, [article.article_id for article in top_articles])
+        drafts.append(draft)
+        draft_prompt = make_drafting_prompt(ticket, classification, top_articles)
+        append_replay_log(
+            log_path,
+            "drafting",
+            classification.ticket_id,
+            draft_prompt,
+            ArtifactName.DRAFT_RESPONSES.value,
+        )
+
     write_json(
         output_dir / ArtifactName.DRAFT_RESPONSES.value,
         {"drafts": [row.model_dump(mode="json") for row in drafts]},
     )
-    return classifications, drafts
+    return drafts
 
 
 def classify_locally(*, ticket_id: str, text: str) -> Classification:
@@ -164,4 +221,3 @@ def append_replay_log(
     )
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(record.model_dump_json() + "\n")
-
