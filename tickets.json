@@ -1,0 +1,29 @@
+{
+  "tickets": [
+    {
+      "ticket_id": "T-1001",
+      "customer_tier": "standard",
+      "language": "en",
+      "subject": "I was charged twice for one order",
+      "message": "I placed one order yesterday but my card shows two charges. One is completed and the other is pending. Please refund me now.",
+      "created_at": "2026-05-20T10:15:00Z"
+    },
+    {
+      "ticket_id": "T-1002",
+      "customer_tier": "vip",
+      "language": "en",
+      "subject": "Cannot log in after resetting password",
+      "message": "I changed my password this morning. Now every login attempt says invalid credentials although the reset link worked.",
+      "created_at": "2026-05-20T11:05:00Z"
+    },
+    {
+      "ticket_id": "T-1003",
+      "customer_tier": "standard",
+      "language": "en",
+      "subject": "Where can I download invoice PDFs?",
+      "message": "I need invoices for the last three months for accounting. I cannot find the download option in the dashboard.",
+      "created_at": "2026-05-20T12:40:00Z"
+    }
+  ]
+}
+

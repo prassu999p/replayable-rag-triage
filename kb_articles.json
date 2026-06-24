@@ -1,0 +1,33 @@
+{
+  "articles": [
+    {
+      "article_id": "KB-001",
+      "title": "Duplicate card charges and pending authorizations",
+      "category": "billing",
+      "updated_at": "2026-05-01T09:00:00Z",
+      "content": "Customers may see both a completed charge and a temporary pending authorization. Pending authorizations usually disappear within 3-5 business days. Refunds should not be promised unless two settled charges are confirmed. Escalate to billing ops if two settled charges exist for the same order."
+    },
+    {
+      "article_id": "KB-002",
+      "title": "Login issues after password reset",
+      "category": "account_access",
+      "updated_at": "2026-05-10T09:00:00Z",
+      "content": "Ask the user to verify they are using the most recent password, clear cached sessions, and retry in an incognito window. If the reset succeeded but login still fails, escalate to account support. Never ask the customer to send their password."
+    },
+    {
+      "article_id": "KB-003",
+      "title": "Downloading invoices from the dashboard",
+      "category": "billing",
+      "updated_at": "2026-04-15T09:00:00Z",
+      "content": "Invoice PDFs are available under Billing > Documents. Customers can filter by month and download each invoice as PDF. If invoices are missing, escalate to billing support."
+    },
+    {
+      "article_id": "KB-004",
+      "title": "Refund policy overview",
+      "category": "billing",
+      "updated_at": "2026-03-22T09:00:00Z",
+      "content": "Refunds depend on settlement status, product type, and fraud checks. Agents should not guarantee same-day refunds unless policy explicitly allows it."
+    }
+  ]
+}
+
